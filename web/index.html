@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iniciar Servidor de Terraria</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+body {
+background: url('https://i.redd.it/yc7buqh53xl51.gif') no-repeat center center fixed;
+background-size: cover;
+font-family: 'Press Start 2P', cursive;
+text-align: center;
+color: #fff;
+}
+.container {
+background: rgba(0, 0, 0, 0.8);
+padding: 20px;
+border-radius: 10px;
+display: inline-block;
+margin-top: 50px;
+}
+input, select, button {
+font-family: 'Press Start 2P', cursive;
+font-size: 14px;
+margin: 10px;
+padding: 8px;
+border: 2px solid #0f5;
+border-radius: 5px;
+background: #222;
+color: #0f5;
+}
+button { cursor: pointer; background: #0a5; }
+.difficulty { display: flex; justify-content: center; gap: 10px; }
+.difficulty button { width: 120px; background: #555; border: 3px solid white; }
+.difficulty button.active { border-color: yellow; background: #0a5; }
+</style>
+</head>
+<body>
+<div class="container">
+<h2>Configurar Servidor de Terraria</h2>
+<form action="execute.php" method="post">
+<label>Nombre del Contenedor:</label><br>
+<input type="text" name="container_name" placeholder="Ejemplo: Terraria01" required><br>
+<label>Semilla del Mundo:</label><br>
+<input type="text" name="seed" placeholder="Ejemplo: 12345"><br>
+<label>Nombre del Mundo:</label><br>
+<input type="text" name="world_name" placeholder="Ejemplo: MiMundo" required><br>
+<label>Número de Jugadores (1-16):</label><br>
+<input type="number" name="players" min="1" max="16" required><br>
+<label>Contraseña del Servidor:</label><br>
+<input type="password" name="password"><br>
+<label>Dificultad:</label>
+<div class="difficulty">
+<button type="button" onclick="selectDifficulty(1)" id="btnNormal">Normal</button>
+<button type="button" onclick="selectDifficulty(2)" id="btnExperto">Experto</button>
+<button type="button" onclick="selectDifficulty(3)" id="btnMaestro">Maestro</button>
+</div>
+<input type="hidden" name="difficulty" id="difficulty" value="1"><br>
+<button type="submit">Iniciar Servidor</button>
+</form>
+</div>
+<script>
+function selectDifficulty(level) {
+    document.getElementById('difficulty').value = level;
+    document.getElementById('btnNormal').classList.remove('active');
+    document.getElementById('btnExperto').classList.remove('active');
+    document.getElementById('btnMaestro').classList.remove('active');
+if (level === 1) document.getElementById('btnNormal').classList.add('active');
+if (level === 2) document.getElementById('btnExperto').classList.add('active');
+if (level === 3) document.getElementById('btnMaestro').classList.add('active');
+}
+</script>
+</body>
+</html>

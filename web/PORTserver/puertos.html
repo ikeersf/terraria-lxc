@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Servidores Activos</title>
+<style>
+body { background: #111; color: #0f5; font-family: monospace; padding: 20px; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { border: 1px solid #0f5; padding: 10px; text-align: left; }
+button { background: #0a5; color: #fff; border: none; padding: 5px 10px; cursor: pointer; }
+</style>
+</head>
+<body>
+<h2>Listado de Servidores</h2>
+<button onclick="cargar()">Actualizar Lista</button>
+<table id="tabla">
+    <thead><tr><th>Nombre</th><th>Estado</th><th>IP</th><th>Acciones</th></tr></thead>
+    <tbody></tbody>
+</table>
+<script>
+async function cargar() {
+    const res = await fetch('estatus.php');
+    const text = await res.text();
+    const tbody = document.querySelector('#tabla tbody');
+    tbody.innerHTML = '';
+    
+    text.trim().split('\n').forEach(linea => {
+        if(!linea) return;
+        const [nombre, estado, ip] = linea.split(',');
+        if(!nombre) return;
+        tbody.innerHTML += `
+            <tr>
+                <td>${nombre}</td>
+                <td>${estado}</td>
+                <td>${ip || 'N/A'}</td>
+                <td>
+                    <form action="start.php" method="POST" style="display:inline">
+                        <input type="hidden" name="container" value="${nombre}">
+                        <button type="submit">Encender</button>
+                    </form>
+                    <form action="apagar.php" method="POST" style="display:inline">
+                        <input type="hidden" name="container" value="${nombre}">
+                        <button type="submit">Apagar</button>
+                    </form>
+                    <form action="borrar.php" method="POST" style="display:inline" onsubmit="return confirm('¿Borrar?')">
+                        <input type="hidden" name="container" value="${nombre}">
+                        <button type="submit" style="background:red">Borrar</button>
+                    </form>
+                </td>
+            </tr>
+        `;
+    });
+}
+cargar();
+</script>
+</body>
+</html>

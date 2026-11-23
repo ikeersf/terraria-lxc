@@ -1,0 +1,13 @@
+*.zip
+*.wld
+terraria-server-*/
+config.txt
+.env
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+vendor/
+composer.lock

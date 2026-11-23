@@ -1,0 +1,11 @@
+{
+    "nombre": "prueba",
+    "semilla": "12313",
+    "mundo": "prueba",
+    "jugadores": "2",
+    "dificultad": "1",
+    "puerto": "8423",
+    "ip": "192.168.238.225",
+    "estado": "RUNNING",
+    "fecha": "2025-05-20 17:04:44"
+}

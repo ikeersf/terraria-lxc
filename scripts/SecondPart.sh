@@ -1,10 +1,10 @@
 #!/bin/bash
 # Cargar variables de configuración
 if [ -f "/root/config.txt" ]; then
-  source /root/config.txt
+   source /root/config.txt
 else
-  echo "Error: No se encontró config.txt"
-  exit 1
+   echo "Error: No se encontró config.txt"
+   exit 1
 fi
 
 # Ruta de descarga y ejecución del servidor
@@ -22,7 +22,8 @@ unzip -o "$CARPETA.zip"
 
 # Crear archivo de configuración
 CONFIG_FILE="${INSTALL_DIR}config.txt"
-cat > "$CONFIG_FILE" <<CONF
+
+cat > "$CONFIG_FILE" <<EOF
 world=${INSTALL_DIR}Worlds/${TEST_WORLD}.wld
 autocreate=1
 seed=$TEST_SEED
@@ -33,7 +34,7 @@ port=$TEST_PORT
 password=$TEST_PASSWORD
 banlist=banlist.txt
 secure=1
-CONF
+EOF
 
 sudo chmod 777 "$CONFIG_FILE"
 
@@ -41,3 +42,4 @@ sudo chmod 777 "$CONFIG_FILE"
 chmod +x "$INSTALL_DIR/$EJECUTAR"
 cd "$INSTALL_DIR"
 ./"$EJECUTAR" -config config.txt
+

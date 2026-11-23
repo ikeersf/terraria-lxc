@@ -1,7 +1,6 @@
 <?php
-if (isset($_POST['container'])) {
-    $container = escapeshellarg($_POST['container']);
-    $output = shell_exec("sudo /bin/bash /var/www/html/PORTserver/apagar.sh $container 2>&1");
-    echo "<pre>$output</pre><a href='../index.html'>Volver</a>";
-}
+        $container_name = escapeshellarg($_GET["name"]);
+        $comandstop = "sudo lxc stop $container_name";
+	shell_exec($comandstop);
+	header("Location: /PORTserver/index.php");
 ?>

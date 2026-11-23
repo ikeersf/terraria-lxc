@@ -1,7 +1,11 @@
 <?php
-if (isset($_POST['container'])) {
-    $container = escapeshellarg($_POST['container']);
-    $output = shell_exec("sudo /bin/bash /var/www/html/PORTserver/borrar.sh $container 2>&1");
-    echo "<pre>$output</pre><a href='../index.html'>Volver</a>";
-}
+        $container_name = escapeshellarg($_GET["name"]);
+        $comandstart = "sudo rm $container_name.data & sudo rm $container_name.txt";
+	$comantstopcontainer = "lxc delete --force $container_name";
+	$info = "bash borrar.sh $container_name";
+
+	shell_exec($comandstart);
+	shell_exec($info);
+
+        header("Location: /PORTserver/index.php");
 ?>

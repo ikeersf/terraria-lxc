@@ -7,14 +7,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = escapeshellarg($_POST["password"]); 
     $difficulty = escapeshellarg($_POST["difficulty"]); 
 
-    // Comando para ejecutar el script en bash 
-    $command = "sudo /bin/bash /var/www/terraria.sh --contenedor=$container_name --semilla=$seed --mundo=$world_name --dificultad=$difficulty --jugadores=$players --contraseña=$password"; 
-
-    // Ejecutar el script y capturar salida 
+    $command = "sudo /bin/bash /var/www/scripts/crear_contenedor.sh --contenedor=$container_name --semilla=$seed --mundo=$world_name --dificultad=$difficulty --jugadores=$players --contraseña=$password"; 
     $output = shell_exec($command . " 2>&1"); 
 
-    // Verificar si el contenedor ya existe 
-    if (strpos($output, "El contenedor $container_name ya existe.") !== false) { 
+    if (strpos($output, "ya existe") !== false) { 
         $status = "Servidor ya existente"; 
     } else if (strpos($output, "Creando el contenedor") !== false) { 
         $status = "Servidor creado correctamente"; 
@@ -36,12 +32,13 @@ background: url('https://i.redd.it/zajy8wh63xl51.gif') no-repeat center center f
 font-family: 'Press Start 2P', cursive; text-align: center; 
 color: #fff; 
 }
-.container { background: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 10px; display: inline-block; margin-top: 50px; }
-.status { font-size: 18px; margin-bottom: 15px; }
-.info { text-align: left; margin-left: auto; margin-right: auto; width: 50%; background: #222; padding: 10px; border: 2px solid #0f5; border-radius: 5px; }
-button { font-family: 'Press Start 2P', cursive; font-size: 14px; margin-top: 15px; padding: 8px; border: 2px solid #0f5; border-radius: 5px; background: #0a5; color: #fff; cursor: pointer; }
+.container { background: rgba(0, 0, 0, 0.85); padding: 30px; border-radius: 10px; display: inline-block; margin-top: 50px; border: 2px solid #0f5; width: 80%; max-width: 600px; }
+.status { font-size: 16px; margin-bottom: 25px; }
+.info { text-align: left; margin-left: auto; margin-right: auto; background: #222; padding: 20px; border: 2px solid #0f5; border-radius: 5px; font-size: 12px; line-height: 2; }
+button { font-family: 'Press Start 2P', cursive; font-size: 14px; margin-top: 25px; padding: 10px 20px; border: 2px solid #0f5; border-radius: 5px; background: #0a5; color: #fff; cursor: pointer; }
+button:hover { background: #0f5; color: #000; }
 .error { color: red; }
-.success { color: green; }
+.success { color: #0f5; }
 </style> 
 </head> 
 <body> 
@@ -52,15 +49,15 @@ button { font-family: 'Press Start 2P', cursive; font-size: 14px; margin-top: 15
 </p>
 <?php if ($status !== "Error al crear el servidor") { ?>
 <div class="info">
-<p><b>Nombre del Contenedor:</b> <?php echo $container_name; ?></p>
-<p><b>Semilla del Mundo:</b> <?php echo $seed; ?></p>
-<p><b>Nombre del Mundo:</b> <?php echo $world_name; ?></p>
-<p><b>Numero de Jugadores:</b> <?php echo $players; ?></p>
-<p><b>Dificultad:</b> <?php echo ($difficulty == 0) ? "Normal" : (($difficulty == 1) ? "Experto" : "Maestro"); ?></p>
+<p><b>Nombre:</b> <?php echo $container_name; ?></p>
+<p><b>Semilla:</b> <?php echo $seed; ?></p>
+<p><b>Mundo:</b> <?php echo $world_name; ?></p>
+<p><b>Jugadores:</b> <?php echo $players; ?></p>
+<p><b>Dificultad:</b> <?php echo ($difficulty == 1) ? "Normal" : (($difficulty == 2) ? "Experto" : "Maestro"); ?></p>
 </div>
 <?php } ?>
 <br>
-<button onclick="window.location.href='index.html'">Volver</button>
+<button onclick="window.location.href='index.html'">Volver al Panel</button>
 </div>
 </body>
 </html>

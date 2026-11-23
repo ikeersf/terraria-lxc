@@ -3,73 +3,138 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Iniciar Servidor de Terraria</title>
+<title>Terraria LXC Manager</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 body {
-background: url('https://i.redd.it/yc7buqh53xl51.gif') no-repeat center center fixed;
-background-size: cover;
-font-family: 'Press Start 2P', cursive;
-text-align: center;
-color: #fff;
+  background: url('https://i.redd.it/yc7buqh53xl51.gif') no-repeat center center fixed;
+  background-size: cover;
+  font-family: 'Press Start 2P', cursive;
+  color: #fff;
+  margin: 0; padding: 20px;
+  display: flex; flex-direction: column; align-items: center;
 }
 .container {
-background: rgba(0, 0, 0, 0.8);
-padding: 20px;
-border-radius: 10px;
-display: inline-block;
-margin-top: 50px;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 30px; border-radius: 10px;
+  width: 90%; max-width: 800px;
+  margin-bottom: 30px;
+  border: 2px solid #0f5;
 }
+h2 { text-align: center; color: #0f5; font-size: 18px; margin-bottom: 20px; }
+label { display: block; font-size: 12px; margin-top: 15px; color: #0f5; }
 input, select, button {
-font-family: 'Press Start 2P', cursive;
-font-size: 14px;
-margin: 10px;
-padding: 8px;
-border: 2px solid #0f5;
-border-radius: 5px;
-background: #222;
-color: #0f5;
+  font-family: 'Press Start 2P', cursive; font-size: 12px;
+  margin-top: 5px; padding: 10px;
+  border: 2px solid #0f5; border-radius: 5px;
+  background: #222; color: #0f5; width: 100%; box-sizing: border-box;
 }
-button { cursor: pointer; background: #0a5; }
-.difficulty { display: flex; justify-content: center; gap: 10px; }
-.difficulty button { width: 120px; background: #555; border: 3px solid white; }
+.difficulty { display: flex; gap: 10px; margin-top: 10px; }
+.difficulty button { width: 33%; background: #555; border: 3px solid white; }
 .difficulty button.active { border-color: yellow; background: #0a5; }
+button.submit { background: #0a5; margin-top: 25px; cursor: pointer; font-size: 14px; }
+button.submit:hover { background: #0f5; color: #000; }
+
+/* Tabla de servidores */
+table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 10px; }
+th, td { border: 1px solid #0f5; padding: 10px; text-align: left; }
+th { background: #0a5; color: #fff; }
+.btn-action { font-size: 10px; padding: 5px; margin: 2px; width: auto; cursor: pointer; }
+.btn-start { background: #0a5; }
+.btn-stop { background: #a50; }
+.btn-del { background: #a00; }
 </style>
 </head>
 <body>
+
+<!-- PANEL 1: Crear Servidor -->
 <div class="container">
-<h2>Configurar Servidor de Terraria</h2>
-<form action="execute.php" method="post">
-<label>Nombre del Contenedor:</label><br>
-<input type="text" name="container_name" placeholder="Ejemplo: Terraria01" required><br>
-<label>Semilla del Mundo:</label><br>
-<input type="text" name="seed" placeholder="Ejemplo: 12345"><br>
-<label>Nombre del Mundo:</label><br>
-<input type="text" name="world_name" placeholder="Ejemplo: MiMundo" required><br>
-<label>Número de Jugadores (1-16):</label><br>
-<input type="number" name="players" min="1" max="16" required><br>
-<label>Contraseña del Servidor:</label><br>
-<input type="password" name="password"><br>
-<label>Dificultad:</label>
-<div class="difficulty">
-<button type="button" onclick="selectDifficulty(1)" id="btnNormal">Normal</button>
-<button type="button" onclick="selectDifficulty(2)" id="btnExperto">Experto</button>
-<button type="button" onclick="selectDifficulty(3)" id="btnMaestro">Maestro</button>
+  <h2>Configurar Nuevo Servidor</h2>
+  <form action="execute.php" method="post">
+    <label>Nombre del Contenedor:</label>
+    <input type="text" name="container_name" placeholder="Ejemplo: terraria01" required>
+    
+    <label>Semilla del Mundo:</label>
+    <input type="text" name="seed" placeholder="Ejemplo: 12345">
+    
+    <label>Nombre del Mundo:</label>
+    <input type="text" name="world_name" placeholder="Ejemplo: MiMundo" required>
+    
+    <label>Número de Jugadores (1-16):</label>
+    <input type="number" name="players" min="1" max="16" value="8" required>
+    
+    <label>Contraseña del Servidor:</label>
+    <input type="password" name="password" placeholder="Opcional">
+    
+    <label>Dificultad:</label>
+    <div class="difficulty">
+      <button type="button" onclick="selectDifficulty(1)" id="btnNormal" class="active">Normal</button>
+      <button type="button" onclick="selectDifficulty(2)" id="btnExperto">Experto</button>
+      <button type="button" onclick="selectDifficulty(3)" id="btnMaestro">Maestro</button>
+    </div>
+    <input type="hidden" name="difficulty" id="difficulty" value="1">
+    
+    <button type="submit" class="submit">Iniciar Servidor</button>
+  </form>
 </div>
-<input type="hidden" name="difficulty" id="difficulty" value="1"><br>
-<button type="submit">Iniciar Servidor</button>
-</form>
+
+<!-- PANEL 2: Gestionar Servidores -->
+<div class="container">
+  <h2>Servidores Activos</h2>
+  <button onclick="cargarServidores()" class="submit" style="margin-top:0; margin-bottom:15px;">Actualizar Lista</button>
+  <table id="tabla">
+    <thead><tr><th>Nombre</th><th>Estado</th><th>IP</th><th>Acciones</th></tr></thead>
+    <tbody></tbody>
+  </table>
 </div>
+
 <script>
 function selectDifficulty(level) {
-    document.getElementById('difficulty').value = level;
-    document.getElementById('btnNormal').classList.remove('active');
-    document.getElementById('btnExperto').classList.remove('active');
-    document.getElementById('btnMaestro').classList.remove('active');
-if (level === 1) document.getElementById('btnNormal').classList.add('active');
-if (level === 2) document.getElementById('btnExperto').classList.add('active');
-if (level === 3) document.getElementById('btnMaestro').classList.add('active');
+  document.getElementById('difficulty').value = level;
+  document.getElementById('btnNormal').classList.remove('active');
+  document.getElementById('btnExperto').classList.remove('active');
+  document.getElementById('btnMaestro').classList.remove('active');
+  if (level === 1) document.getElementById('btnNormal').classList.add('active');
+  if (level === 2) document.getElementById('btnExperto').classList.add('active');
+  if (level === 3) document.getElementById('btnMaestro').classList.add('active');
 }
+
+async function cargarServidores() {
+  const res = await fetch('PORTserver/estatus.php');
+  const text = await res.text();
+  const tbody = document.querySelector('#tabla tbody');
+  tbody.innerHTML = '';
+  
+  text.trim().split('\n').forEach(linea => {
+    if(!linea || linea.includes('NOMBRE')) return;
+    const [nombre, estado, ip] = linea.split(',');
+    if(!nombre) return;
+    
+    tbody.innerHTML += `
+      <tr>
+        <td>${nombre}</td>
+        <td style="color: ${estado === 'RUNNING' ? '#0f5' : 'red'}">${estado}</td>
+        <td>${ip || 'N/A'}</td>
+        <td>
+          <button class="btn-action btn-start" onclick="accion('start.php', '${nombre}')">ON</button>
+          <button class="btn-action btn-stop" onclick="accion('apagar.php', '${nombre}')">OFF</button>
+          <button class="btn-action btn-del" onclick="if(confirm('¿Borrar?')) accion('borrar.php', '${nombre}')">DEL</button>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+async function accion(script, container) {
+  const formData = new FormData();
+  formData.append('container', container);
+  const res = await fetch('PORTserver/' + script, { method: 'POST', body: formData });
+  const out = await res.text();
+  alert(out);
+  cargarServidores();
+}
+
+cargarServidores();
 </script>
 </body>
 </html>

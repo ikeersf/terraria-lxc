@@ -1,0 +1,365 @@
+#!/usr/bin/env bash
+# terraria-lxc — crea y gestiona servidores de Terraria en contenedores LXD.
+#
+# Se instala en /usr/local/sbin/terraria-lxc y se ejecuta como root.
+# La web lo llama con "sudo -n", así que TODA entrada se valida aquí:
+# este script es la única puerta entre Apache y LXD.
+#
+# Uso:
+#   terraria-lxc list                      Lista los servidores (JSON)
+#   terraria-lxc create  < datos.json      Crea un servidor (en segundo plano)
+#   terraria-lxc start|stop|restart NOMBRE
+#   terraria-lxc delete NOMBRE
+#   terraria-lxc console NOMBRE            Últimas líneas de la consola
+#   terraria-lxc send NOMBRE "comando"     Envía un comando a la consola
+#   terraria-lxc prepare                   Descarga el servidor a la caché
+#
+# Los errores se escriben en stderr (texto) y salen con código != 0.
+# Las respuestas correctas se escriben en stdout (JSON).
+
+set -euo pipefail
+umask 077
+export PATH=/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C.UTF-8
+
+CONF=/etc/terraria-lxc/terraria-lxc.conf
+# shellcheck source=/dev/null
+[[ -r $CONF ]] && . "$CONF"
+
+: "${TERRARIA_VERSION:=1461}"
+: "${IMAGE:=ubuntu:24.04}"
+: "${PORT_MIN:=7777}"
+: "${PORT_MAX:=7876}"
+: "${MAX_SERVERS:=10}"
+: "${MEMORY_LIMIT:=2GiB}"
+: "${CPU_LIMIT:=2}"
+
+SHARE_DIR=/opt/terraria-lxc
+DATA_DIR=/var/lib/terraria-lxc
+SERVERS_DIR=$DATA_DIR/servers
+CACHE_DIR=$DATA_DIR/cache
+LOG_DIR=$DATA_DIR/logs
+LOCK=$DATA_DIR/.lock
+
+# Todos los contenedores del panel llevan este prefijo. Así el panel
+# nunca puede tocar otros contenedores que haya en la máquina.
+PREFIX=tlxc-
+
+die() { echo "$*" >&2; exit 1; }
+
+[[ $EUID -eq 0 ]] || die "terraria-lxc debe ejecutarse como root."
+command -v jq >/dev/null || die "Falta jq. Vuelve a ejecutar install.sh."
+command -v lxc >/dev/null || die "LXD no está instalado. Vuelve a ejecutar install.sh."
+mkdir -p "$SERVERS_DIR" "$CACHE_DIR" "$LOG_DIR"
+
+# --- Utilidades -----------------------------------------------------------
+
+valid_name() { [[ $1 =~ ^[a-z][a-z0-9-]{1,22}[a-z0-9]$ ]]; }
+
+need_name() {
+    local name=${1:-}
+    valid_name "$name" || die "Nombre de servidor no válido."
+    [[ -f $SERVERS_DIR/$name.json ]] || die "El servidor \"$name\" no existe."
+}
+
+meta_get() { jq -r "$2" "$SERVERS_DIR/$1.json"; }
+
+# Escribe el JSON de metadatos de forma atómica.
+meta_write() {
+    local name=$1 json=$2 tmp
+    tmp=$(mktemp "$SERVERS_DIR/.$name.XXXXXX")
+    printf '%s\n' "$json" > "$tmp"
+    mv -f "$tmp" "$SERVERS_DIR/$name.json"
+}
+
+meta_update() {
+    local name=$1; shift
+    meta_write "$name" "$(jq "$@" "$SERVERS_DIR/$name.json")"
+}
+
+ct_exists() { lxc info "$PREFIX$1" >/dev/null 2>&1; }
+
+ct_status() { lxc list "^$PREFIX$1\$" --format csv -c s 2>/dev/null | head -n1; }
+
+# Ejecuta tmux dentro del contenedor como el usuario "terraria".
+ct_tmux() {
+    local name=$1; shift
+    lxc exec "$PREFIX$name" -- runuser -u terraria -- tmux -L terraria "$@"
+}
+
+port_free() {
+    local p=$1
+    # Puerto ya asignado a otro servidor del panel
+    if compgen -G "$SERVERS_DIR/*.json" >/dev/null &&
+       jq -e --argjson p "$p" 'select(.port == $p)' "$SERVERS_DIR"/*.json >/dev/null 2>&1; then
+        return 1
+    fi
+    # Puerto en uso en el anfitrión
+    [[ -z $(ss -Htln "sport = :$p" 2>/dev/null) ]]
+}
+
+# --- Descarga del servidor (se hace una vez y se guarda en caché) -----------
+
+server_dir() { echo "$CACHE_DIR/$TERRARIA_VERSION"; }
+
+fetch_server() {
+    local dest tmp bin
+    dest=$(server_dir)
+    [[ -x $dest/TerrariaServer.bin.x86_64 ]] && return 0
+
+    exec 8>"$CACHE_DIR/.download.lock"
+    flock 8
+    [[ -x $dest/TerrariaServer.bin.x86_64 ]] && return 0
+
+    local url="https://terraria.org/api/download/pc-dedicated-server/terraria-server-$TERRARIA_VERSION.zip"
+    tmp=$(mktemp -d "$CACHE_DIR/.tmp.XXXXXX")
+    echo "Descargando servidor de Terraria $TERRARIA_VERSION..."
+    if ! curl -fsSL --retry 3 -o "$tmp/server.zip" "$url"; then
+        rm -rf "$tmp"
+        echo "No se pudo descargar $url. Revisa TERRARIA_VERSION en $CONF." >&2
+        return 1
+    fi
+    unzip -q "$tmp/server.zip" -d "$tmp/x" || { rm -rf "$tmp"; echo "El zip descargado está dañado." >&2; return 1; }
+    bin=$(find "$tmp/x" -type f -path '*/Linux/TerrariaServer.bin.x86_64' | head -n1)
+    if [[ -z $bin ]]; then
+        rm -rf "$tmp"
+        echo "El zip descargado no contiene el servidor para Linux." >&2
+        return 1
+    fi
+    rm -rf "$dest"
+    mv "$(dirname "$bin")" "$dest"
+    chmod +x "$dest"/TerrariaServer*
+    rm -rf "$tmp"
+    flock -u 8
+}
+
+# --- Comandos -------------------------------------------------------------
+
+cmd_list() {
+    local lxc_json='[]' out='[]' f name ct status state listening
+    lxc_json=$(lxc list "^$PREFIX" --format json 2>/dev/null || echo '[]')
+
+    for f in "$SERVERS_DIR"/*.json; do
+        [[ -e $f ]] || continue
+        name=$(basename "$f" .json)
+        ct=$PREFIX$name
+        state=$(jq -r '.state' "$f")
+        status=$(jq -r --arg n "$ct" '.[] | select(.name == $n) | .status' <<<"$lxc_json")
+
+        case $state in
+            creating|error) ;;
+            *)
+                case $status in
+                    Running)
+                        listening=$(lxc exec "$ct" -- ss -Htln 'sport = :7777' 2>/dev/null || true)
+                        if [[ -n $listening ]]; then state=online; else state=starting; fi ;;
+                    Stopped) state=offline ;;
+                    "")      state=missing ;;
+                    *)       state=busy ;;
+                esac ;;
+        esac
+
+        out=$(jq --argjson all "$out" --argjson lxc "$lxc_json" \
+                 --arg ct "$ct" --arg state "$state" '
+            ($lxc | map(select(.name == $ct)) | first // {}) as $c
+            | $all + [ del(.password) + {
+                state: $state,
+                has_password: ((.password // "") != ""),
+                memory: ($c.state.memory.usage // null)
+              } ]' "$f")
+    done
+
+    jq -c 'sort_by(.created)' <<<"$out"
+}
+
+cmd_create() {
+    local input name world size difficulty players seed password count port now
+
+    input=$(head -c 8192)
+    jq -e 'type == "object"' >/dev/null 2>&1 <<<"$input" || die "Datos no válidos."
+
+    # Validación de todos los campos. jq usa expresiones regulares Unicode,
+    # así que se aceptan tildes y eñes en el nombre del mundo.
+    jq -e '
+        (.name       | type == "string" and test("^[a-z][a-z0-9-]{1,22}[a-z0-9]$"))
+    and (.world      | type == "string" and test("^[\\p{L}\\p{N} _.\\-]{1,32}$"))
+    and (.size       | IN(1, 2, 3))
+    and (.difficulty | IN(0, 1, 2, 3))
+    and (.players    | type == "number" and . >= 1 and . <= 32 and floor == .)
+    and ((.seed     // "") | type == "string" and test("^[\\p{L}\\p{N} _.\\-]{0,40}$"))
+    and ((.password // "") | type == "string" and test("^[^\\p{Cc}]{0,32}$"))
+    ' >/dev/null 2>&1 <<<"$input" || die "Algún campo no es válido. Revisa el formulario."
+
+    name=$(jq -r .name <<<"$input")
+
+    exec 9>"$LOCK"
+    flock 9
+
+    [[ -f $SERVERS_DIR/$name.json ]] && die "Ya existe un servidor llamado \"$name\"."
+    ct_exists "$name" && die "Ya existe un contenedor $PREFIX$name. Bórralo con: lxc delete --force $PREFIX$name"
+
+    count=$(find "$SERVERS_DIR" -maxdepth 1 -name '*.json' | wc -l)
+    (( count < MAX_SERVERS )) || die "Has llegado al máximo de $MAX_SERVERS servidores. Borra alguno o sube MAX_SERVERS en $CONF."
+
+    port=""
+    for (( p = PORT_MIN; p <= PORT_MAX; p++ )); do
+        if port_free "$p"; then port=$p; break; fi
+    done
+    [[ -n $port ]] || die "No queda ningún puerto libre entre $PORT_MIN y $PORT_MAX."
+
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    meta_write "$name" "$(jq --argjson port "$port" --arg now "$now" --arg ver "$TERRARIA_VERSION" '{
+        name, world, size, difficulty, players,
+        seed: (.seed // ""), password: (.password // ""),
+        port: $port, version: $ver, created: $now,
+        state: "creating", error: null
+    }' <<<"$input")"
+
+    flock -u 9
+
+    # La creación tarda (contenedor + copia del servidor), así que se hace
+    # en segundo plano y la web va consultando el estado.
+    setsid "$0" _provision "$name" >"$LOG_DIR/$name.log" 2>&1 </dev/null &
+
+    jq -c 'del(.password)' "$SERVERS_DIR/$name.json"
+}
+
+cmd_provision() {
+    local name=$1 ct=$PREFIX$1 port cfg i
+    valid_name "$name" || exit 1
+
+    fail() {
+        echo "ERROR: $1"
+        meta_update "$name" --arg e "$1" '.state = "error" | .error = $e'
+        exit 1
+    }
+    trap 'fail "Falló un paso de la instalación (línea $LINENO). Mira la consola del servidor."' ERR
+
+    # Solo se provisiona un servidor recién registrado y sin contenedor.
+    [[ -f $SERVERS_DIR/$name.json && $(meta_get "$name" .state) == creating ]] || exit 1
+    ct_exists "$name" && exit 1
+
+    port=$(meta_get "$name" .port)
+
+    echo "[1/5] Preparando el servidor de Terraria $TERRARIA_VERSION..."
+    fetch_server 2>&1 || fail "No se pudo descargar el servidor de Terraria $TERRARIA_VERSION. Revisa TERRARIA_VERSION en $CONF."
+
+    echo "[2/5] Creando el contenedor $ct ($IMAGE)..."
+    lxc launch "$IMAGE" "$ct" \
+        -c limits.memory="$MEMORY_LIMIT" \
+        -c limits.cpu="$CPU_LIMIT" \
+        -c boot.autostart=true \
+        -c user.terraria-lxc=1 || fail "LXD no pudo crear el contenedor. ¿Hay conexión a internet para descargar la imagen?"
+
+    for (( i = 0; i < 60; i++ )); do
+        lxc exec "$ct" -- test -d /root >/dev/null 2>&1 && break
+        sleep 1
+    done
+
+    echo "[3/5] Copiando archivos al contenedor..."
+    cfg=$(mktemp)
+    jq -r '
+        "world=/opt/terraria/worlds/world.wld",
+        "autocreate=\(.size)",
+        "worldname=\(.world)",
+        (if .seed != "" then "seed=\(.seed)" else empty end),
+        "difficulty=\(.difficulty)",
+        "maxplayers=\(.players)",
+        "port=7777",
+        "password=\(.password)",
+        "worldpath=/opt/terraria/worlds",
+        "banlist=/opt/terraria/banlist.txt",
+        "secure=1",
+        "upnp=0",
+        "language=es-ES"
+    ' "$SERVERS_DIR/$name.json" > "$cfg"
+
+    lxc exec "$ct" -- mkdir -p /opt/terraria/worlds
+    lxc file push -r "$(server_dir)" "$ct/opt/terraria/"
+    lxc exec "$ct" -- sh -c "rm -rf /opt/terraria/server && mv /opt/terraria/$TERRARIA_VERSION /opt/terraria/server"
+    lxc file push "$cfg" "$ct/opt/terraria/serverconfig.txt"
+    lxc file push "$SHARE_DIR/container/setup.sh" "$ct/root/setup.sh"
+    rm -f "$cfg"
+
+    echo "[4/5] Configurando el servicio dentro del contenedor..."
+    lxc exec "$ct" -- bash /root/setup.sh || fail "Falló la configuración dentro del contenedor."
+
+    echo "[5/5] Abriendo el puerto $port..."
+    lxc config device add "$ct" terraria proxy \
+        listen="tcp:0.0.0.0:$port" connect="tcp:127.0.0.1:7777" >/dev/null \
+        || fail "No se pudo abrir el puerto $port."
+
+    meta_update "$name" '.state = "ready" | .error = null'
+    echo "Listo. El mundo se está generando; tardará uno o dos minutos la primera vez."
+}
+
+cmd_power() {
+    local action=$1 name=${2:-} state
+    need_name "$name"
+    state=$(meta_get "$name" .state)
+    [[ $state == creating ]] && die "El servidor todavía se está creando."
+    [[ $state == error ]] && die "La creación falló. Borra el servidor y vuelve a crearlo."
+    ct_exists "$name" || die "El contenedor $PREFIX$name ya no existe."
+
+    case $action in
+        start)   [[ $(ct_status "$name") == RUNNING ]] || lxc start "$PREFIX$name" ;;
+        stop)    [[ $(ct_status "$name") == STOPPED ]] || lxc stop "$PREFIX$name" --timeout 60 ;;
+        restart) lxc restart "$PREFIX$name" --timeout 60 ;;
+    esac
+    echo '{"ok":true}'
+}
+
+cmd_delete() {
+    local name=${1:-} state created age
+    need_name "$name"
+    state=$(meta_get "$name" .state)
+    if [[ $state == creating ]]; then
+        created=$(date -d "$(meta_get "$name" .created)" +%s)
+        age=$(( $(date +%s) - created ))
+        (( age > 900 )) || die "El servidor todavía se está creando. Espera a que termine."
+    fi
+    if ct_exists "$name"; then
+        lxc delete --force "$PREFIX$name"
+    fi
+    rm -f "$SERVERS_DIR/$name.json" "$LOG_DIR/$name.log"
+    echo '{"ok":true}'
+}
+
+cmd_console() {
+    local name=${1:-} state text=""
+    need_name "$name"
+    state=$(meta_get "$name" .state)
+
+    if [[ $state == ready && $(ct_status "$name") == RUNNING ]]; then
+        text=$(ct_tmux "$name" capture-pane -p -J -t terraria -S -200 2>/dev/null || true)
+        [[ -n $text ]] || text="El servidor está arrancando..."
+    elif [[ $state == ready ]]; then
+        text="El servidor está apagado."
+    else
+        text=$(tail -n 200 "$LOG_DIR/$name.log" 2>/dev/null || echo "Sin registro todavía.")
+    fi
+    jq -cn --arg t "$text" '{text: $t}'
+}
+
+cmd_send() {
+    local name=${1:-} command=${2:-}
+    need_name "$name"
+    [[ $command =~ ^[[:print:]]{1,120}$ ]] || die "Comando no válido."
+    [[ $(meta_get "$name" .state) == ready && $(ct_status "$name") == RUNNING ]] \
+        || die "El servidor tiene que estar encendido."
+    ct_tmux "$name" send-keys -t terraria -l -- "$command"
+    ct_tmux "$name" send-keys -t terraria Enter
+    echo '{"ok":true}'
+}
+
+case ${1:-} in
+    list)              cmd_list ;;
+    create)            cmd_create ;;
+    _provision)        cmd_provision "${2:-}" ;;
+    start|stop|restart) cmd_power "$1" "${2:-}" ;;
+    delete)            cmd_delete "${2:-}" ;;
+    console)           cmd_console "${2:-}" ;;
+    send)              cmd_send "${2:-}" "${3:-}" ;;
+    prepare)           fetch_server || exit 1; echo "Servidor $TERRARIA_VERSION en caché: $(server_dir)" ;;
+    *) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

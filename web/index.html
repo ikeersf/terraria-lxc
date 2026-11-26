@@ -2,140 +2,153 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iniciar Servidor de Terraria</title>
-    <link rel="icon" href="terraria1234.png" type="image/png">
-    <style>
-        /* Estilo para el botón de navegación */
-        .boton-navegacion {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            padding: 5px 10px;
-            font-size: 28px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            z-index: 1000;
-        }
-        .boton-navegacion:hover {
-            background-color: #0056b3;
-        }
-
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
-        body {
-            background: url('https://i.redd.it/yc7buqh53xl51.gif') no-repeat center center fixed;
-            background-size: cover;
-            font-family: 'San Francisco', cursive;
-            text-align: center;
-            color: #fff;
-        }
-
-        .container {
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-            display: inline-block;
-            margin-top: 50px;
-        }
-
-        input, select, button {
-            font-family: 'San Francisco', bold type;
-            font-size: 14px;
-            margin: 10px;
-            padding: 8px;
-            border: 2px solid #0f5;
-            border-radius: 5px;
-            background: #222;
-            color: #0f5;
-        }
-
-        button {
-            cursor: pointer;
-            background: #0a5;
-        }
-
-        .difficulty {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .difficulty button {
-            width: 120px;
-            background: #555;
-            border: 3px solid white;
-        }
-
-        .difficulty button.active {
-            border-color: yellow;
-            background: #0a5;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Terraria LXC</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Pixelify+Sans:wght@500;700&display=swap">
+    <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
-
-    <!-- Botón de navegación -->
-    <button class="boton-navegacion" onclick="location.href='/navegacion.html'">Ir a Servidores</button>
-
-    <div class="container">
-        <h2>Configura el teu servidor</h2>
-        <form id="gameForm" action="execute.php" method="post">      <!-- en esta linea falta execute.php-->
-            <label>Nom del contenidor:</label><br>
-            <input type="text" name="container_name" placeholder="Ejemplo: Terraria01" required><br>
-
-            <label>Llavor del món:</label><br>
-            <input type="text" name="seed" placeholder="Ejemplo: 12345"><br>
-
-            <label>Nom del món:</label><br>
-            <input type="text" name="world_name" placeholder="Ejemplo: MiMundo" required><br>
-
-            <label>Número de jugadors (1-16):</label><br>
-            <input type="number" name="players" min="1" max="16" required><br>
-
-            <label>Contrasenya del servidor:</label><br>
-            <input type="password" name="password"><br>
-
-            <label>Dificultat:</label>
-            <div class="difficulty">
-                <button type="button" onclick="selectDifficulty(0)" id="btnNormal">Normal</button>
-                <button type="button" onclick="selectDifficulty(1)" id="btnExperto">Expert</button>
-                <button type="button" onclick="selectDifficulty(2)" id="btnMaestro">Mestre</button>
+    <header class="surface">
+        <div class="surface__inner">
+            <div class="brand">
+                <img src="assets/favicon.svg" alt="" width="40" height="40">
+                <div>
+                    <h1>Terraria LXC</h1>
+                    <p>Tus mundos, cada uno en su contenedor.</p>
+                </div>
             </div>
-            <input type="hidden" name="difficulty" id="difficulty" value="1"><br>
+            <dl class="summary" aria-live="polite">
+                <div><dt>En línea</dt><dd id="sum-online">–</dd></div>
+                <div><dt>Mundos</dt><dd id="sum-total">–</dd></div>
+                <div><dt>Dirección</dt><dd id="sum-host">–</dd></div>
+            </dl>
+        </div>
+        <div class="terrain" aria-hidden="true"></div>
+    </header>
 
-	    <button type="button" id="btnEnviar" onclick="enviarform()">Iniciar Servidor</button>
+    <main class="underground">
+        <section class="create stepped" aria-labelledby="create-title">
+            <h2 id="create-title">Nuevo mundo</h2>
+            <form id="create-form" novalidate>
+                <label class="field">
+                    <span>Nombre del mundo</span>
+                    <input name="world" required maxlength="32" autocomplete="off" placeholder="La Cueva de Iker">
+                </label>
+
+                <label class="field">
+                    <span>Identificador</span>
+                    <input name="name" required maxlength="24" autocomplete="off" spellcheck="false"
+                           pattern="[a-z][a-z0-9\-]{1,22}[a-z0-9]" placeholder="la-cueva-de-iker">
+                    <small>Nombre del contenedor. Minúsculas, números y guiones.</small>
+                </label>
+
+                <fieldset class="field">
+                    <legend>Tamaño</legend>
+                    <div class="choice">
+                        <label><input type="radio" name="size" value="1"><span>Pequeño</span></label>
+                        <label><input type="radio" name="size" value="2" checked><span>Mediano</span></label>
+                        <label><input type="radio" name="size" value="3"><span>Grande</span></label>
+                    </div>
+                </fieldset>
+
+                <fieldset class="field">
+                    <legend>Dificultad</legend>
+                    <div class="choice choice--4">
+                        <label><input type="radio" name="difficulty" value="0" checked><span>Clásico</span></label>
+                        <label><input type="radio" name="difficulty" value="1"><span>Experto</span></label>
+                        <label><input type="radio" name="difficulty" value="2"><span>Maestro</span></label>
+                        <label><input type="radio" name="difficulty" value="3"><span>Viaje</span></label>
+                    </div>
+                </fieldset>
+
+                <div class="field-row">
+                    <label class="field">
+                        <span>Jugadores</span>
+                        <input name="players" type="number" min="1" max="32" value="8" required>
+                    </label>
+                    <label class="field">
+                        <span>Semilla <em>opcional</em></span>
+                        <input name="seed" maxlength="40" autocomplete="off" placeholder="Aleatoria">
+                    </label>
+                </div>
+
+                <label class="field">
+                    <span>Contraseña <em>opcional</em></span>
+                    <input name="password" type="password" maxlength="32" autocomplete="new-password"
+                           placeholder="Sin contraseña">
+                </label>
+
+                <p class="form-error" id="form-error" role="alert" hidden></p>
+                <button class="btn btn--torch" type="submit">Crear mundo</button>
+            </form>
+        </section>
+
+        <section class="worlds" aria-labelledby="worlds-title">
+            <h2 id="worlds-title">Tus mundos</h2>
+            <div id="world-list" class="world-list" aria-live="polite">
+                <p class="loading">Cargando…</p>
+            </div>
+        </section>
+    </main>
+
+    <template id="world-template">
+        <article class="world stepped">
+            <header class="world__head">
+                <span class="lamp" aria-hidden="true"></span>
+                <div class="world__title">
+                    <h3 data-f="world"></h3>
+                    <p data-f="name"></p>
+                </div>
+                <span class="state" data-f="state"></span>
+            </header>
+            <div class="address">
+                <code data-f="address"></code>
+                <button class="btn btn--ghost btn--small" data-act="copy" type="button">Copiar</button>
+            </div>
+            <p class="world__detail" data-f="detail"></p>
+            <p class="world__note" data-f="note" hidden></p>
+            <div class="world__actions">
+                <button class="btn" data-act="start" type="button">Encender</button>
+                <button class="btn" data-act="stop" type="button">Apagar</button>
+                <button class="btn" data-act="restart" type="button">Reiniciar</button>
+                <button class="btn" data-act="console" type="button">Consola</button>
+                <button class="btn btn--danger" data-act="delete" type="button">Borrar</button>
+            </div>
+        </article>
+    </template>
+
+    <dialog id="console-dialog" class="dialog dialog--wide stepped">
+        <header class="dialog__head">
+            <h2 id="console-title">Consola</h2>
+            <button class="btn btn--ghost btn--small" data-close type="button">Cerrar</button>
+        </header>
+        <pre id="console-output" class="console" tabindex="0"></pre>
+        <div class="console__quick">
+            <button class="btn btn--small" data-cmd="save" type="button">Guardar mundo</button>
+            <button class="btn btn--small" data-cmd="playing" type="button">Ver jugadores</button>
+            <button class="btn btn--small" data-cmd="dawn" type="button">Hacer de día</button>
+        </div>
+        <form id="console-form" class="console__form">
+            <input name="command" maxlength="120" autocomplete="off" aria-label="Comando"
+                   placeholder="Escribe un comando, por ejemplo: say Hola a todos">
+            <button class="btn btn--torch" type="submit">Enviar</button>
         </form>
-    </div>
+    </dialog>
 
-    <script>
-    function selectDifficulty(level) {
-        document.getElementById('difficulty').value = level;
-        document.getElementById('btnNormal').classList.remove('active');
-        document.getElementById('btnExperto').classList.remove('active');
-        document.getElementById('btnMaestro').classList.remove('active');
+    <dialog id="delete-dialog" class="dialog stepped">
+        <h2 id="delete-title">¿Borrar el mundo?</h2>
+        <p>Se borrarán el contenedor y el mundo guardado. No se puede deshacer.</p>
+        <div class="dialog__actions">
+            <button class="btn btn--ghost" data-close type="button">Cancelar</button>
+            <button class="btn btn--danger" id="delete-confirm" type="button">Borrar mundo</button>
+        </div>
+    </dialog>
 
-        if (level === 0) document.getElementById('btnNormal').classList.add('active');
-        if (level === 1) document.getElementById('btnExperto').classList.add('active');
-        if (level === 2) document.getElementById('btnMaestro').classList.add('active');
-    }
+    <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
-    function enviarform() {
-        const form = document.getElementById('gameForm');
-        const boton = document.getElementById('btnEnviar');
-
-        if (form.checkValidity()) {
-            boton.disabled = true;
-            boton.textContent = "Enviando...";
-            form.submit();
-        } else {
-            form.reportValidity();
-        }
-    }
-    </script>
-
+    <script src="assets/app.js"></script>
 </body>
 </html>
